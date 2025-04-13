@@ -183,12 +183,18 @@ Module SmokeTest.
   Proof. admit. Admitted.
   
   Lemma nat_always n (s : state Z) : [| Nat n |] s => n.
-  Proof. admit. Admitted.
+  Proof. apply bs_Nat. Qed.
   
   Lemma double_and_sum (s : state Z) (e : expr) (z : Z)
         (HH : [| e [*] (Nat 2) |] s => z) :
     [| e [+] e |] s => z.
-  Proof. admit. Admitted.
+  Proof. inversion HH. subst.
+          assert ((za * 2)%Z = (za + za)%Z).
+          { symmetry. apply (Zplus_diag_eq_mult_2 za). }
+          subst. inversion VALB. subst. rewrite H. apply bs_Add.
+            + assumption.
+            + assumption.
+  Qed.
   
 End SmokeTest.
 
@@ -203,7 +209,12 @@ where "e1 << e2" := (subexpr e1 e2).
 
 Lemma strictness (e e' : expr) (HSub : e' << e) (st : state Z) (z : Z) (HV : [| e |] st => z) :
   exists z' : Z, [| e' |] st => z'.
-Proof. admit. Admitted.
+Proof.  generalize dependent z.
+        induction HSub.
+        - intros. exists z. exact HV. 
+        - intros. inversion HV. subst. all: apply (IHHSub za). all: exact VALA.
+        - intros. inversion HV. subst. all: apply (IHHSub zb). all: exact VALB.
+Qed.  
 
 Reserved Notation "x ? e" (at level 0).
 
@@ -223,7 +234,15 @@ Lemma defined_expression
       (RED : [| e |] s => z)
       (ID  : id ? e) :
   exists z', s / id => z'.
-Proof. admit. Admitted.
+Proof. generalize dependent z.
+      induction e.
+      - intros. inversion ID.
+      - intros. inversion ID. subst. inversion RED. subst. exists z. exact VAR.
+      - intros. inversion RED. 
+        all: subst. all: inversion ID. subst.
+        all: inversion H3. all: eauto.
+Qed.
+
 
 (* If a variable in expression is undefined in some state, then the expression
    is undefined is that state as well
@@ -231,13 +250,24 @@ Proof. admit. Admitted.
 Lemma undefined_variable (e : expr) (s : state Z) (id : id)
       (ID : id ? e) (UNDEF : forall (z : Z), ~ (s / id => z)) :
   forall (z : Z), ~ ([| e |] s => z).
-Proof. admit. Admitted.
+Proof. induction e.
+      - intros. inversion ID.
+      - intros. inversion ID. subst. unfold not. intros. inversion H. subst. remember (UNDEF z). congruence. 
+      - intros. inversion ID. subst. unfold not. intros. inversion H.
+        all: subst. all: destruct H3. all: try apply (IHe1 H0 za). all: try apply (IHe2 H0 zb). all: assumption.
+Qed.
 
 (* The evaluation relation is deterministic *)
 Lemma eval_deterministic (e : expr) (s : state Z) (z1 z2 : Z) 
       (E1 : [| e |] s => z1) (E2 : [| e |] s => z2) :
   z1 = z2.
-Proof. admit. Admitted.
+Proof.
+  generalize dependent z1. generalize dependent z2. induction e.
+  - intros. inversion E1. subst. inversion E2. subst. reflexivity.
+  - intros. inversion E1. subst. inversion E2. subst. eapply State.state_deterministic. exact VAR. exact VAR0.
+  - intros. inversion E1. all: inversion E2. all: subst. all: try inversion H5.
+  all: remember (IHe1 za VALA za0 VALA0). all: remember (IHe2 zb VALB zb0 VALB0). all: subst. all: congruence.
+Qed.
 
 (* Equivalence of states w.r.t. an identifier *)
 Definition equivalent_states (s1 s2 : state Z) (id : id) :=
@@ -248,7 +278,12 @@ Lemma variable_relevance (e : expr) (s1 s2 : state Z) (z : Z)
           equivalent_states s1 s2 id)
       (EV : [| e |] s1 => z) :
   [| e |] s2 => z.
-Proof. admit. Admitted.
+Proof. generalize dependent z.
+    induction e.
+    - intros. inversion EV. subst. apply bs_Nat.
+    - intros. inversion EV. subst. apply bs_Var. remember (bs_Var s1 i z VAR). remember (v_Var i). remember (FV i v). apply e0. exact VAR.
+    - intros. inversion EV. all: subst. all: econstructor. all: eauto.
+Qed.
 
 Definition equivalent (e1 e2 : expr) : Prop :=
   forall (n : Z) (s : state Z), 
@@ -256,14 +291,17 @@ Definition equivalent (e1 e2 : expr) : Prop :=
 Notation "e1 '~~' e2" := (equivalent e1 e2) (at level 42, no associativity).
 
 Lemma eq_refl (e : expr): e ~~ e.
-Proof. admit. Admitted.
+Proof. econstructor. all: eauto. Qed.
 
 Lemma eq_symm (e1 e2 : expr) (EQ : e1 ~~ e2): e2 ~~ e1.
-Proof. admit. Admitted.
+Proof. econstructor. all: unfold equivalent in EQ. all: apply EQ. Qed.
 
 Lemma eq_trans (e1 e2 e3 : expr) (EQ1 : e1 ~~ e2) (EQ2 : e2 ~~ e3):
   e1 ~~ e3.
-Proof. admit. Admitted.
+Proof. econstructor. unfold equivalent in EQ1. unfold equivalent in EQ2.
+       - intros H. apply (EQ1 n s) in H. apply (EQ2 n s) in H. exact H.
+       - intros H. apply (EQ2 n s) in H. apply (EQ1 n s) in H. exact H.
+Qed.
 
 Inductive Context : Type :=
 | Hole : Context
@@ -287,7 +325,18 @@ Notation "e1 '~c~' e2" := (contextual_equivalent e1 e2)
 
 Lemma eq_eq_ceq (e1 e2 : expr) :
   e1 ~~ e2 <-> e1 ~c~ e2.
-Proof. admit. Admitted.
+Proof.
+  unfold contextual_equivalent. unfold equivalent.
+  split.
+  - split. intros. all: generalize dependent n. all: induction C. all: simpl.
+    + intros. apply (H n s). exact H0.
+    + intros. remember (IHC n ). all: inversion H0. all: apply IHC in VALA. all: econstructor. all: eauto.
+    + intros. inversion H0. all: apply IHC in VALB. all: econstructor. all: eauto.
+    + intros. apply (H n s). exact H0.
+    + intros. remember (IHC n ). all: inversion H0. all: apply IHC in VALA. all: econstructor. all: eauto.
+    + intros. inversion H0. all: apply IHC in VALB. all: econstructor. all: eauto.
+  - intros. apply (H (Hole)).
+Qed.
 
 Module SmallStep.
 
