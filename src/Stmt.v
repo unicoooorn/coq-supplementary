@@ -107,7 +107,7 @@ Definition contextual_equivalent (s1 s2 : stmt) :=
 Notation "s1 '~c~' s2" := (contextual_equivalent s1 s2) (at level 42, no associativity).
 
 Lemma contextual_equiv_stronger (s1 s2 : stmt) (H: s1 ~c~ s2) : s1 ~e~ s2.
-Proof. admit. Admitted.
+Proof. apply (H Hole). Qed.
 
 Lemma eval_equiv_weaker : exists (s1 s2 : stmt), s1 ~e~ s2 /\ ~ (s1 ~c~ s2).
 Proof. admit. Admitted.
@@ -136,37 +136,73 @@ Module SmokeTest.
   (* Associativity of sequential composition *)
   Lemma seq_assoc (s1 s2 s3 : stmt) :
     ((s1 ;; s2) ;; s3) ~~~ (s1 ;; (s2 ;; s3)).
-  Proof. admit. Admitted.
+  Proof.
+    unfold bs_equivalent. intros. split. all: intros.
+    - inversion H. subst. inversion STEP1. eapply bs_Seq.
+      + subst. simpl. exact STEP0.
+      + eapply bs_Seq.
+        * exact STEP3.
+        * exact STEP2.
+    - inversion H. subst. inversion STEP2. eapply bs_Seq.
+      + eapply bs_Seq.
+        * exact STEP1.
+        * exact STEP0.
+      + assumption.
+  Qed.
   
   (* One-step unfolding *)
   Lemma while_unfolds (e : expr) (s : stmt) :
     (WHILE e DO s END) ~~~ (COND e THEN s ;; WHILE e DO s END ELSE SKIP END).
-  Proof. admit. Admitted.
+  Proof.
+    unfold bs_equivalent. intros. split. all: intros.
+    - inversion H. subst. all: eauto.
+    - inversion H. all: subst. all: try inversion STEP. all: eauto.
+  Qed.
       
   (* Terminating loop invariant *)
   Lemma while_false (e : expr) (s : stmt) (st : state Z)
         (i o : list Z) (c : conf)
         (EXE : c == WHILE e DO s END ==> (st, i, o)) :
     [| e |] st => Z.zero.
-  Proof. admit. Admitted.
+  Proof.
+    remember (WHILE e DO s END).
+    remember (st, i, o).
+    induction EXE. all: inversion Heqs0.
+    - apply IHEXE2. subst. all: eauto.
+    - inversion Heqp. subst. eauto.
+  Qed.
   
   (* Big-step semantics does not distinguish non-termination from stuckness *)
   Lemma loop_eq_undefined :
     (WHILE (Nat 1) DO SKIP END) ~~~
     (COND (Nat 3) THEN SKIP ELSE SKIP END).
-  Proof. admit. Admitted.
+  Proof.
+      unfold bs_equivalent. intros. split.
+      - intros. destruct c'. destruct p. remember (while_false (Nat 1) (SKIP) s l0 l c H). inversion e.
+      - intros. inversion H. all: subst. all: inversion CVAL.
+  Qed.
   
   (* Loops with equivalent bodies are equivalent *)
   Lemma while_eq (e : expr) (s1 s2 : stmt)
         (EQ : s1 ~~~ s2) :
     WHILE e DO s1 END ~~~ WHILE e DO s2 END.
-  Proof. admit. Admitted.
+  Proof.
+    split. all: intros. all: remember (WHILE e DO _ END) in H.
+    all: induction H. all: inversion Heqs. all: subst. all: eauto. all: subst.
+    all: remember (EQ ((st, i, o)) c'). all: destruct i0. all: eauto.
+  Qed.
   
   (* Loops with the constant true condition don't terminate *)
   (* Exercise 4.8 from Winskel's *)
   Lemma while_true_undefined c s c' :
     ~ c == WHILE (Nat 1) DO s END ==> c'.
-  Proof. admit. Admitted.
+  Proof.
+  intro H.
+  remember (WHILE (Nat 1) DO s END) as loop.
+  induction H. all: try inversion Heqloop.
+  all: subst. all: inversion CVAL. all: eauto.
+Qed.
+    
   
 End SmokeTest.
 
@@ -219,7 +255,14 @@ Ltac eval_zero_not_one :=
 Lemma bs_int_deterministic (c c1 c2 : conf) (s : stmt)
       (EXEC1 : c == s ==> c1) (EXEC2 : c == s ==> c2) :
   c1 = c2.
-Proof. admit. Admitted.
+Proof.
+  generalize dependent c2.
+  induction EXEC1. all: intros. all: inversion EXEC2.
+  all: try by_eval_deterministic. all: try eval_zero_not_one.
+  all: try eapply e1 in VAL. all: subst. all: eauto.
+  - eapply IHEXEC1_1 in STEP1. subst. eapply IHEXEC1_2 in STEP2. exact STEP2.
+  - eapply IHEXEC1_1 in STEP. subst. eapply IHEXEC1_2 in WSTEP. exact WSTEP.
+Qed.
 
 Definition equivalent_states (s1 s2 : state Z) :=
   forall id, Expr.equivalent_states s1 s2 id.

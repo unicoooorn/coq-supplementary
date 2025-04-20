@@ -389,10 +389,18 @@ Module SmallStep.
   #[export] Hint Constructors ss_eval : core.
 
   Lemma ss_eval_reachable s e e' (HE: s |- e -->> e') : s |- e ~~> e'.
-  Proof. admit. Admitted.
+  Proof. induction HE.
+      - eauto.
+      - eauto.
+  Qed.
 
   Lemma ss_reachable_eval s e z (HR: s |- e ~~> (Nat z)) : s |- e -->> (Nat z).
-  Proof.  admit. Admitted.
+  Proof. remember (Nat z). induction HR.
+    - subst. apply se_Stop. 
+    - subst. eapply se_Step.
+      + eauto.
+      + eauto.
+  Qed.
 
   #[export] Hint Resolve ss_eval_reachable : core.
   #[export] Hint Resolve ss_reachable_eval : core.
@@ -401,49 +409,97 @@ Module SmallStep.
                      (H1: s |- e  -->> e')
                      (H2: s |- e' -->  e'') :
     s |- e -->> e''.
-  Proof. admit. Admitted.
+  Proof. induction H1.
+    - inversion H2.
+    - econstructor.
+      + eauto.
+      + eauto. 
+  Qed.
   
   Lemma ss_reachable_trans s e e' e''
                           (H1: s |- e  ~~> e')
                           (H2: s |- e' ~~> e'') :
     s |- e ~~> e''.
-  Proof. admit. Admitted.
+  Proof. induction H1.
+    - exact H2.
+    - econstructor.
+      + eauto.
+      + eauto.
+  Qed.
           
   Definition normal_form (e : expr) : Prop :=
     forall s, ~ exists e', (s |- e --> e').   
 
   Lemma value_is_normal_form (e : expr) (HV: is_value e) : normal_form e.
-  Proof. admit. Admitted.
+  Proof. unfold normal_form. unfold not. intros.
+         destruct H. 
+         inversion HV. subst.  
+         inversion H.
+  Qed.
 
   Lemma normal_form_is_not_a_value : ~ forall (e : expr), normal_form e -> is_value e.
-  Proof. admit. Admitted.
+  Proof. unfold not. intros.
+    remember ((Nat 1337) [/] (Nat 0)) as contr.
+    assert (normal_form contr).
+    - unfold normal_form. unfold not. intros. destruct H0.
+      + subst. inversion H0.
+        * subst. inversion LEFT.
+        * inversion RIGHT.
+        * inversion EVAL. inversion VALB. eauto.
+    - eapply H in H0. inversion H0. subst. inversion H1.
+  Qed.
   
   Lemma ss_nondeterministic : ~ forall (e e' e'' : expr) (s : state Z), s |- e --> e' -> s |- e --> e'' -> e' = e''.
-  Proof. admit. Admitted.
+  Proof.
+  unfold not. intros.
+  remember (((Nat (0 + 0))) [+] ((Nat 0) [+] (Nat 0))) as e1.
+  remember (((Nat 0) [+] (Nat 0)) [+] (Nat (0 + 0))) as e2.
+  remember (H (((Nat 0) [+] (Nat 0)) [+] (((Nat 0) [+] (Nat 0)))) e1 e2 []).
+  assert (e1 <> e2).
+  - subst. unfold not. intros. inversion H0.
+  - eapply H0. eapply e. all: subst. all: repeat econstructor.
+Qed.
   
   Lemma ss_deterministic_step (e e' : expr)
                          (s    : state Z)
                          (z z' : Z)
                          (H1   : s |- e --> (Nat z))
                          (H2   : s |- e --> e') : e' = Nat z.
-  Proof. admit. Admitted.
+  Proof.
+  inversion H1. all: inversion H2. inversion H2. all: subst. all: inversion H5. 
+  all: subst. all: try specialize (state_deterministic Z s i z z1 VAL VAL0).
+  all: intros. all: subst. all: eauto.
+    - inversion LEFT.
+    - inversion RIGHT.
+    - subst. specialize (eval_deterministic (Bop op (Nat zl) (Nat zr)) s z z1 EVAL EVAL0).
+      intros. subst. eauto.
+  Qed.
   
   Lemma ss_eval_stops_at_value (st : state Z) (e e': expr) (Heval: st |- e -->> e') : is_value e'.
-  Proof. admit. Admitted.
+  Proof. induction Heval. all: try econstructor. all: eauto. Qed.
 
   Lemma ss_subst s C e e' (HR: s |- e ~~> e') : s |- (C <~ e) ~~> (C <~ e').
-  Proof. admit. Admitted.
+  Proof. induction C. all: simpl. all: try induction IHC. all: repeat eauto.
+  Qed.
    
   Lemma ss_subst_binop s e1 e2 e1' e2' op (HR1: s |- e1 ~~> e1') (HR2: s |- e2 ~~> e2') :
     s |- (Bop op e1 e2) ~~> (Bop op e1' e2').
-  Proof. admit. Admitted.
+  Proof. 
+    eapply (ss_subst s (BopL _ Hole _)) in HR1.
+    eapply (ss_subst s (BopR _ _ Hole)) in HR2.
+    eapply ss_reachable_trans. all: eauto.
+  Qed.
 
   Lemma ss_bop_reachable s e1 e2 op za zb z
     (H : [|Bop op e1 e2|] s => (z))
     (VALA : [|e1|] s => (za))
     (VALB : [|e2|] s => (zb)) :
     s |- (Bop op (Nat za) (Nat zb)) ~~> (Nat z).
-  Proof. admit. Admitted.
+  Proof. inversion H.
+    all: specialize (eval_deterministic e1 s za za0 VALA VALA0). all: intros.
+    all: specialize (eval_deterministic e2 s zb zb0 VALB VALB0). all: intros.
+    all: eauto. all: subst. all: info_eauto.
+Qed.
 
   #[export] Hint Resolve ss_bop_reachable : core.
    
@@ -454,14 +510,43 @@ Module SmallStep.
         (VALA : [|e1|] s => (za))
         (VALB : [|e2|] s => (zb)) :
         s |- Bop op e1 e2 -->> (Nat z).
-  Proof. admit. Admitted.
+  Proof.
+    eapply ss_eval_reachable in IHe1.
+    eapply ss_eval_reachable in IHe2.
+    eapply ss_reachable_eval.
+    specialize (ss_bop_reachable s e1 e2 op za zb z H VALA VALB).
+    intros. eapply ss_reachable_trans.
+    - apply reach_base.
+    - specialize (ss_subst_binop s e1 e2 (Nat za) (Nat zb) op IHe1 IHe2).
+      intros. eapply ss_reachable_trans. 
+      + exact H1.
+      + exact H0.
+  Qed.
+    
 
   #[export] Hint Resolve ss_eval_binop : core.
   
   Lemma ss_eval_equiv (e : expr)
                       (s : state Z)
                       (z : Z) : [| e |] s => z <-> (s |- e -->> (Nat z)).
-  Proof. admit. Admitted.
+  Proof.
+    generalize dependent z.
+    split.
+    - generalize dependent z. induction e.
+      + intros. inversion H. subst. eapply se_Stop.
+      + intros. inversion H. subst. eapply ss_reachable_eval.
+        eapply ss_eval_reachable. eapply se_Step. eapply ss_Var.
+        * exact VAR.
+        * eapply se_Stop.
+      + intros. inversion H. all: eauto.
+    - generalize dependent z. induction e.
+      + intros. inversion H.
+        * eapply bs_Nat.
+        * subst. inversion HStep.
+      + intros. inversion H. subst. inversion Heval.
+        * subst. inversion HStep. subst. apply bs_Var. assumption.
+        * subst. inversion HStep. subst. inversion HStep0.
+      + intros. admit. Admitted.
   
 End SmallStep.
 
